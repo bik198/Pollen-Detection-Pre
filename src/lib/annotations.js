@@ -76,6 +76,36 @@ export async function getAnnotationSummaryForImages(imageIds) {
   return byImage;
 }
 
+export async function getReferenceImages() {
+  const { reference } = await loadBase();
+  return reference ?? [];
+}
+
+export async function getFullCocoExport() {
+  const base = await loadBase();
+  const edits = await getEditsForAnnotationIds(base.annotations.map((a) => a.id));
+  const annotations = base.annotations.map((a) => {
+    const edit = edits.get(a.id);
+    return edit ? { ...a, category_id: edit.categoryId } : a;
+  });
+  return { ...base, annotations };
+}
+
+export async function getCategoryCounts() {
+  const base = await loadBase();
+  const categories = base.categories.filter((c) => c.id !== 0);
+  const edits = await getEditsForAnnotationIds(base.annotations.map((a) => a.id));
+
+  const counts = new Map(categories.map((c) => [c.id, 0]));
+  for (const a of base.annotations) {
+    const edit = edits.get(a.id);
+    const categoryId = edit ? edit.categoryId : a.category_id;
+    if (counts.has(categoryId)) counts.set(categoryId, counts.get(categoryId) + 1);
+  }
+
+  return categories.map((c) => ({ name: c.name, count: counts.get(c.id) ?? 0 }));
+}
+
 export async function saveAnnotationEdit(annotationId, categoryId, editedBy) {
   const { annotations, categories } = await loadBase();
   const base = annotations.find((a) => a.id === annotationId);

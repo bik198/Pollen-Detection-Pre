@@ -17,8 +17,8 @@ export default function AnnotationPanel({ annotations, selectedId, categories, o
           <li key={annotation.id}>
             <button
               type="button"
-              onClick={() => onSelect(annotation.id)}
-              className={`block w-full border-b border-neutral-200 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${
+              onClick={() => onSelect(annotation.id === selectedId ? null : annotation.id)}
+              className={`block w-full cursor-pointer border-b border-neutral-200 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${
                 annotation.id === selectedId ? "bg-[#6b7a5e]/10" : ""
               }`}
             >
