@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function AnnotationPanel({ annotations, selectedId, categories, onSelect, onSaved }) {
   const selected = annotations.find((a) => a.id === selectedId) ?? null;
@@ -55,6 +56,7 @@ function categoryName(categories, categoryId) {
 }
 
 function EditForm({ annotation, categories, onSaved }) {
+  const router = useRouter();
   const [categoryId, setCategoryId] = useState(annotation.category_id);
   const [status, setStatus] = useState("idle"); // idle | saving | error
 
@@ -69,6 +71,7 @@ function EditForm({ annotation, categories, onSaved }) {
       if (!res.ok) throw new Error("Save failed");
       const { annotation: merged } = await res.json();
       onSaved(merged);
+      router.refresh();
       setStatus("idle");
     } catch {
       setStatus("error");

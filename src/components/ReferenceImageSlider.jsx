@@ -12,14 +12,40 @@ export default function ReferenceImageSlider({ images, activeSpecies }) {
     scrollerRef.current?.scrollBy({ left: amount, behavior: "smooth" });
   }
 
+  function fastScrollToCard(card) {
+    const scroller = scrollerRef.current;
+    if (!scroller || !card) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const delta =
+      cardRect.left + cardRect.width / 2 - (scrollerRect.left + scrollerRect.width / 2);
+    const start = scroller.scrollLeft;
+    const target = start + delta;
+    const duration = 150;
+    const startTime = performance.now();
+
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      scroller.scrollLeft = start + (target - start) * eased;
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
   useEffect(() => {
-    if (!activeSpecies) return;
-    cardRefs.current.get(activeSpecies)?.scrollIntoView({
-      behavior: "smooth",
-      inline: "center",
-      block: "nearest",
-    });
-  }, [activeSpecies]);
+    if (!activeSpecies) {
+      setSelected(null);
+      return;
+    }
+    fastScrollToCard(cardRefs.current.get(activeSpecies));
+    const match = images.find(
+      (img) => img.file_name.replace(/\.[^.]+$/, "") === activeSpecies
+    );
+    if (match && match.annotations.length > 0) {
+      setSelected({ fileName: match.file_name, annotationId: match.annotations[0].id });
+    }
+  }, [activeSpecies, images]);
 
   if (images.length === 0) return null;
 
@@ -104,17 +130,37 @@ export default function ReferenceImageSlider({ images, activeSpecies }) {
                     >
                       {image.annotations.map((annotation) => {
                         const isSelected = annotation.id === selected?.annotationId && isThisSelected;
-                        return (annotation.segmentation ?? []).map((ring, ringIndex) => (
-                          <polygon
-                            key={`${annotation.id}-${ringIndex}`}
-                            points={pointsToString(ring)}
+                        const rings = annotation.segmentation ?? [];
+                        if (rings.length > 0) {
+                          return rings.map((ring, ringIndex) => (
+                            <polygon
+                              key={`${annotation.id}-${ringIndex}`}
+                              points={pointsToString(ring)}
+                              onClick={() => toggleSelect(annotation.id)}
+                              className="cursor-pointer"
+                              fill="transparent"
+                              stroke={color}
+                              strokeWidth={isSelected ? 16 : 10}
+                            />
+                          ));
+                        }
+                        // No polygon data for this reference crop — fall back to a
+                        // clickable bbox outline so zoom-on-click still works.
+                        const [x, y, w, h] = annotation.bbox;
+                        return (
+                          <rect
+                            key={annotation.id}
+                            x={x}
+                            y={y}
+                            width={w}
+                            height={h}
                             onClick={() => toggleSelect(annotation.id)}
                             className="cursor-pointer"
                             fill="transparent"
                             stroke={color}
                             strokeWidth={isSelected ? 16 : 10}
                           />
-                        ));
+                        );
                       })}
                     </svg>
                   )}

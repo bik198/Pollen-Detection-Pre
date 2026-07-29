@@ -8,6 +8,12 @@ async function loadBase() {
   const snap = await getRtdb().ref("/").once("value");
   const data = snap.val();
   if (!data) throw new Error("Realtime Database root has no annotations data");
+  console.log("[firebase] RTDB root snapshot loaded:", {
+    images: data.images?.length,
+    annotations: data.annotations?.length,
+    categories: data.categories?.length,
+    hasReference: Boolean(data.reference),
+  });
   cachedBase = data;
   return cachedBase;
 }
@@ -50,6 +56,8 @@ async function getEditsForAnnotationIds(annotationIds) {
 export async function getAnnotationsForImage(imageId) {
   const raw = await rawAnnotationsForImage(imageId);
   const edits = await getEditsForAnnotationIds(raw.map((a) => a.id));
+  console.log(`[firebase] getAnnotationsForImage(${imageId}) raw:`, JSON.stringify(raw, null, 2));
+  console.log(`[firebase] getAnnotationsForImage(${imageId}) edits:`, JSON.stringify([...edits.entries()], null, 2));
   return raw.map((a) => {
     const edit = edits.get(a.id);
     return {

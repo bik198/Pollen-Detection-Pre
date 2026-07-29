@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { colorForCategory } from "@/lib/categoryColors";
 
 const SPOTLIGHT_PADDING = 10;
@@ -26,7 +26,48 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
 
   const containerRef = useRef(null);
   const legendRef = useRef(null);
+  const labelRefs = useRef(new Map());
   const [legendPos, setLegendPos] = useState(DEFAULT_LEGEND_POS);
+  const [labelOffsets, setLabelOffsets] = useState(new Map());
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+
+    const visible = annotations.filter((a) => !selectedId || a.id === selectedId);
+    const items = visible
+      .map((a) => {
+        const el = labelRefs.current.get(a.id);
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        return {
+          id: a.id,
+          top: rect.top - containerRect.top,
+          bottom: rect.bottom - containerRect.top,
+          left: rect.left - containerRect.left,
+          right: rect.right - containerRect.left,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.top - b.top || a.left - b.left);
+
+    const placed = [];
+    const offsets = new Map();
+    for (const item of items) {
+      let shiftY = 0;
+      for (const p of placed) {
+        const overlapsHorizontally = item.left < p.right && item.right > p.left;
+        if (!overlapsHorizontally) continue;
+        const gapNeeded = p.bottom + 2 - (item.top + shiftY);
+        if (gapNeeded > 0) shiftY += gapNeeded;
+      }
+      offsets.set(item.id, shiftY);
+      placed.push({ ...item, top: item.top + shiftY, bottom: item.bottom + shiftY });
+    }
+
+    setLabelOffsets((prev) => (mapsEqual(prev, offsets) ? prev : offsets));
+  }, [annotations, selectedId]);
 
   function handleLegendPointerDown(e) {
     const container = containerRef.current;
@@ -150,14 +191,21 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
               const [x, y] = annotation.bbox;
               const isSelected = annotation.id === selectedId;
               const color = colorForCategory(category.name);
+              const yPercent = (y / image.height) * 100;
+              const flipBelow = yPercent < 4;
+              const offset = labelOffsets.get(annotation.id) ?? 0;
               return (
                 <span
                   key={annotation.id}
+                  ref={(el) => {
+                    if (el) labelRefs.current.set(annotation.id, el);
+                    else labelRefs.current.delete(annotation.id);
+                  }}
                   className="pointer-events-none absolute whitespace-nowrap px-1 font-mono text-[11px] leading-tight text-black"
                   style={{
                     left: `${(x / image.width) * 100}%`,
-                    top: `${(y / image.height) * 100}%`,
-                    transform: "translateY(-100%)",
+                    top: `${yPercent}%`,
+                    transform: `${flipBelow ? "translateY(2px)" : "translateY(-100%)"} translateY(${offset}px)`,
                     backgroundColor: color,
                     outline: isSelected ? "2px solid #262420" : "none",
                   }}
@@ -209,6 +257,14 @@ function pointsToString(ring) {
     points.push(`${ring[i]},${ring[i + 1]}`);
   }
   return points.join(" ");
+}
+
+function mapsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const [key, value] of a) {
+    if (b.get(key) !== value) return false;
+  }
+  return true;
 }
 
 function labelText(category, annotation) {
