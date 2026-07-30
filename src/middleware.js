@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
 const COOKIE_NAME = "pollen_auth";
-const COOKIE_VALUE = "granted-4565";
 
 export function middleware(request) {
+  const secret = process.env.POLLEN_AUTH_COOKIE_SECRET;
   const cookie = request.cookies.get(COOKIE_NAME);
-  if (cookie?.value === COOKIE_VALUE) {
+  if (secret && cookie?.value === secret) {
     return NextResponse.next();
   }
 

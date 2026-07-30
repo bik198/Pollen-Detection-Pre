@@ -23,6 +23,20 @@ export default async function CategoryCountsPanel() {
           </li>
         ))}
       </ul>
+      <div className="flex shrink-0 flex-col gap-2 border-t border-neutral-300 p-2">
+        <a
+          href="/api/export/coco"
+          className="border border-neutral-400 bg-white px-3 py-1.5 text-center text-sm hover:bg-neutral-100"
+        >
+          Download COCO annotation JSON
+        </a>
+        <a
+          href="/api/export/counts"
+          className="border border-neutral-400 bg-white px-3 py-1.5 text-center text-sm hover:bg-neutral-100"
+        >
+          Download Object Counts
+        </a>
+      </div>
     </div>
   );
 }

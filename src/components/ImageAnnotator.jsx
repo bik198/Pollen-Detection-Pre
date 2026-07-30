@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { colorForCategory } from "@/lib/categoryColors";
 
 const SPOTLIGHT_PADDING = 10;
@@ -29,25 +29,50 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
   const labelRefs = useRef(new Map());
   const [legendPos, setLegendPos] = useState(DEFAULT_LEGEND_POS);
   const [labelOffsets, setLabelOffsets] = useState(new Map());
+  const [showBoundingBox, setShowBoundingBox] = useState(true);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    setShowBoundingBox(true);
+  }, [selectedId]);
+
+  function recomputeLabelOffsets() {
     const container = containerRef.current;
     if (!container) return;
+
+    // Collision avoidance only applies to the zoomed-out overview, where
+    // several labels can be visible at once. While a single annotation is
+    // selected/zoomed, only its own label renders, so no offset is needed —
+    // and computing one here would read back a rect already displaced by a
+    // stale offset, corrupting the correction on the very next recompute.
+    if (selectedId) {
+      setLabelOffsets((prev) => (prev.size === 0 ? prev : new Map()));
+      return;
+    }
+
     const containerRect = container.getBoundingClientRect();
 
-    const visible = annotations.filter((a) => !selectedId || a.id === selectedId);
-    const items = visible
+    const items = annotations
       .map((a) => {
         const el = labelRefs.current.get(a.id);
         if (!el) return null;
-        const rect = el.getBoundingClientRect();
-        return {
-          id: a.id,
-          top: rect.top - containerRect.top,
-          bottom: rect.bottom - containerRect.top,
-          left: rect.left - containerRect.left,
-          right: rect.right - containerRect.left,
-        };
+        // Only width/height are read from the DOM (translate offsets don't
+        // affect element size) — position is computed from the same math the
+        // render uses, so this stays idempotent no matter how many times it runs.
+        const size = el.getBoundingClientRect();
+        const [x, y] = a.bbox;
+        const yPercent = (y / image.height) * 100;
+        const flipBelow = yPercent < 4;
+        const rawTop = containerRect.height * (y / image.height);
+        const rawLeft = containerRect.width * (x / image.width);
+        const top = flipBelow ? rawTop + 2 : rawTop - size.height;
+        let left = rawLeft;
+        let right = left + size.width;
+        let dx = 0;
+        if (right > containerRect.width) dx -= right - containerRect.width;
+        if (left + dx < 0) dx = -left;
+        left += dx;
+        right += dx;
+        return { id: a.id, top, bottom: top + size.height, left, right, dx };
       })
       .filter(Boolean)
       .sort((a, b) => a.top - b.top || a.left - b.left);
@@ -62,11 +87,15 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
         const gapNeeded = p.bottom + 2 - (item.top + shiftY);
         if (gapNeeded > 0) shiftY += gapNeeded;
       }
-      offsets.set(item.id, shiftY);
+      offsets.set(item.id, { dx: item.dx, dy: shiftY });
       placed.push({ ...item, top: item.top + shiftY, bottom: item.bottom + shiftY });
     }
 
     setLabelOffsets((prev) => (mapsEqual(prev, offsets) ? prev : offsets));
+  }
+
+  useLayoutEffect(() => {
+    recomputeLabelOffsets();
   }, [annotations, selectedId]);
 
   function handleLegendPointerDown(e) {
@@ -107,8 +136,20 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
       className="relative h-full shrink-0 overflow-hidden border border-neutral-400 bg-neutral-100"
       style={{ aspectRatio: `${image.width} / ${image.height}` }}
     >
+      {selectedAnnotation && (
+        <button
+          type="button"
+          onClick={() => setShowBoundingBox((v) => !v)}
+          className="absolute right-2 top-2 z-20 border border-neutral-400 bg-white/90 px-2 py-1 font-mono text-[11px] text-neutral-800 hover:bg-white"
+        >
+          {showBoundingBox ? "Hide box" : "Show box"}
+        </button>
+      )}
       <div
         className="relative transition-transform duration-300 ease-out"
+        onTransitionEnd={(e) => {
+          if (e.propertyName === "transform") recomputeLabelOffsets();
+        }}
         style={{
           transform: zoom
             ? `translate(${zoom.dx}%, ${zoom.dy}%) scale(${zoom.scale})`
@@ -133,6 +174,7 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
             const isSelected = annotation.id === selectedId;
             const isHidden = Boolean(selectedId) && !isSelected;
             const color = colorForCategory(category.name);
+            const strokeHidden = isHidden || (isSelected && !showBoundingBox);
             return (annotation.segmentation ?? []).map((ring, ringIndex) => (
               <polygon
                 key={`${annotation.id}-${ringIndex}`}
@@ -140,7 +182,7 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
                 onClick={() => onSelect(isSelected ? null : annotation.id)}
                 className="cursor-pointer"
                 fill="transparent"
-                stroke={isHidden ? "transparent" : color}
+                stroke={strokeHidden ? "transparent" : color}
                 strokeWidth={isSelected ? 8 : 3}
               />
             ));
@@ -168,16 +210,17 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
                 mask="url(#spotlight-mask)"
                 className="pointer-events-none"
               />
-              {(selectedAnnotation.segmentation ?? []).map((ring, ringIndex) => (
-                <polygon
-                  key={`selected-${ringIndex}`}
-                  points={pointsToString(ring)}
-                  fill="transparent"
-                  stroke={selectedCategory ? colorForCategory(selectedCategory.name) : "#e2b93b"}
-                  strokeWidth={8}
-                  className="pointer-events-none"
-                />
-              ))}
+              {showBoundingBox &&
+                (selectedAnnotation.segmentation ?? []).map((ring, ringIndex) => (
+                  <polygon
+                    key={`selected-${ringIndex}`}
+                    points={pointsToString(ring)}
+                    fill="transparent"
+                    stroke={selectedCategory ? colorForCategory(selectedCategory.name) : "#e2b93b"}
+                    strokeWidth={8}
+                    className="pointer-events-none"
+                  />
+                ))}
             </>
           )}
         </svg>
@@ -193,7 +236,7 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
               const color = colorForCategory(category.name);
               const yPercent = (y / image.height) * 100;
               const flipBelow = yPercent < 4;
-              const offset = labelOffsets.get(annotation.id) ?? 0;
+              const offset = labelOffsets.get(annotation.id) ?? { dx: 0, dy: 0 };
               return (
                 <span
                   key={annotation.id}
@@ -205,7 +248,7 @@ export default function ImageAnnotator({ image, annotations, categories, selecte
                   style={{
                     left: `${(x / image.width) * 100}%`,
                     top: `${yPercent}%`,
-                    transform: `${flipBelow ? "translateY(2px)" : "translateY(-100%)"} translateY(${offset}px)`,
+                    transform: `${flipBelow ? "translateY(2px)" : "translateY(-100%)"} translate(${offset.dx}px, ${offset.dy}px)`,
                     backgroundColor: color,
                     outline: isSelected ? "2px solid #262420" : "none",
                   }}
@@ -262,7 +305,8 @@ function pointsToString(ring) {
 function mapsEqual(a, b) {
   if (a.size !== b.size) return false;
   for (const [key, value] of a) {
-    if (b.get(key) !== value) return false;
+    const other = b.get(key);
+    if (!other || other.dx !== value.dx || other.dy !== value.dy) return false;
   }
   return true;
 }

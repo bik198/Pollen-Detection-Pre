@@ -39,7 +39,7 @@ export default async function ImageDetailPage({ params }) {
   });
 
   return (
-    <main className="mx-auto flex h-screen max-w-7xl flex-col px-4">
+    <main className="mx-auto flex h-screen max-w-7xl flex-col px-4 xl:ml-[280px] xl:mr-[248px]">
       <div className="shrink-0 pt-3">
         <PrevNextNav
           prevImage={sortedImages[index - 1] ?? null}

@@ -8,12 +8,6 @@ async function loadBase() {
   const snap = await getRtdb().ref("/").once("value");
   const data = snap.val();
   if (!data) throw new Error("Realtime Database root has no annotations data");
-  console.log("[firebase] RTDB root snapshot loaded:", {
-    images: data.images?.length,
-    annotations: data.annotations?.length,
-    categories: data.categories?.length,
-    hasReference: Boolean(data.reference),
-  });
   cachedBase = data;
   return cachedBase;
 }
@@ -56,8 +50,6 @@ async function getEditsForAnnotationIds(annotationIds) {
 export async function getAnnotationsForImage(imageId) {
   const raw = await rawAnnotationsForImage(imageId);
   const edits = await getEditsForAnnotationIds(raw.map((a) => a.id));
-  console.log(`[firebase] getAnnotationsForImage(${imageId}) raw:`, JSON.stringify(raw, null, 2));
-  console.log(`[firebase] getAnnotationsForImage(${imageId}) edits:`, JSON.stringify([...edits.entries()], null, 2));
   return raw.map((a) => {
     const edit = edits.get(a.id);
     return {
@@ -96,7 +88,39 @@ export async function getFullCocoExport() {
     const edit = edits.get(a.id);
     return edit ? { ...a, category_id: edit.categoryId } : a;
   });
-  return { ...base, annotations };
+  const notesSnap = await getRtdb().ref("/imageNotes").once("value");
+  const notes = notesSnap.val() ?? {};
+  const images = base.images.map((img) => ({
+    ...img,
+    note: notes[img.id]?.text ?? img.note ?? "",
+  }));
+  return { ...base, images, annotations };
+}
+
+export async function getImageNote(imageId) {
+  const snap = await getRtdb().ref(`/imageNotes/${imageId}`).once("value");
+  return snap.val() ?? null;
+}
+
+export async function saveImageNote(imageId, text, updatedBy) {
+  const { images } = await loadBase();
+  if (!images.some((img) => img.id === imageId)) {
+    throw new Error(`Unknown image id ${imageId}`);
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed) {
+    await getRtdb().ref(`/imageNotes/${imageId}`).remove();
+    return null;
+  }
+
+  const note = {
+    text: trimmed,
+    updatedBy: updatedBy || null,
+    updatedAt: ServerValue.TIMESTAMP,
+  };
+  await getRtdb().ref(`/imageNotes/${imageId}`).set(note);
+  return { text: trimmed, updatedBy: updatedBy || null };
 }
 
 export async function getCategoryCounts() {

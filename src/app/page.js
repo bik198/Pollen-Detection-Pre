@@ -6,7 +6,7 @@ export default async function GalleryPage() {
   const summaries = await getAnnotationSummaryForImages(images.map((img) => img.id));
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
+    <main className="mx-auto max-w-7xl px-4 py-6 xl:ml-[280px] xl:mr-[248px]">
       <header className="mb-5 border-b border-neutral-300 pb-3">
         <h1 className="text-lg font-semibold text-neutral-900">Pollen annotation review</h1>
         <p className="mt-1 font-mono text-xs text-neutral-500">{images.length} images</p>

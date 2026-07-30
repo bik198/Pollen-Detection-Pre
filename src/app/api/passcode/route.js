@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 
-const PASSCODE = "4565";
 const COOKIE_NAME = "pollen_auth";
-const COOKIE_VALUE = "granted-4565";
 
 export async function POST(request) {
   let body;
@@ -12,8 +10,14 @@ export async function POST(request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (body?.code !== PASSCODE) {
+  const passcode = process.env.POLLEN_PASSCODE;
+  if (!passcode || body?.code !== passcode) {
     return Response.json({ error: "Incorrect passcode" }, { status: 401 });
+  }
+
+  const cookieValue = process.env.POLLEN_AUTH_COOKIE_SECRET;
+  if (!cookieValue) {
+    return Response.json({ error: "Server misconfigured: POLLEN_AUTH_COOKIE_SECRET not set" }, { status: 500 });
   }
 
   const username = typeof body?.username === "string" ? body.username.trim().slice(0, 40) : "";
@@ -22,7 +26,7 @@ export async function POST(request) {
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(COOKIE_NAME, COOKIE_VALUE, {
+  response.cookies.set(COOKIE_NAME, cookieValue, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

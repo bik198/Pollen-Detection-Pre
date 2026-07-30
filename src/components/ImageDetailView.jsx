@@ -22,7 +22,7 @@ export default function ImageDetailView({ image, annotations: initialAnnotations
   }
 
   return (
-    <div className="flex h-full min-h-0 gap-3">
+    <div data-note-anchor className="flex h-full min-h-0 gap-3">
       <ImageAnnotator
         image={image}
         annotations={annotations}
