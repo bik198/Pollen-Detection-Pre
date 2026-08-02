@@ -3,12 +3,19 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+function sanitizeDestination(raw) {
+  if (typeof raw !== "string" || raw.length === 0) return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/";
+  return raw;
+}
+
 export default function PasscodeForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("Incorrect passcode.");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e) {
@@ -25,11 +32,12 @@ export default function PasscodeForm() {
     if (!res.ok) {
       setSubmitting(false);
       setError(true);
+      setErrorMessage(res.status === 429 ? "Too many attempts. Try again later." : "Incorrect passcode.");
       setCode("");
       return;
     }
 
-    const destination = searchParams.get("from") || "/";
+    const destination = sanitizeDestination(searchParams.get("from"));
     router.replace(destination);
     router.refresh();
   }
@@ -66,7 +74,7 @@ export default function PasscodeForm() {
           className="mb-3 mt-1 w-full border border-neutral-400 px-3 py-2 font-mono text-lg tracking-widest"
         />
         {error && (
-          <p className="mb-3 font-mono text-xs text-red-700">Incorrect passcode.</p>
+          <p className="mb-3 font-mono text-xs text-red-700">{errorMessage}</p>
         )}
         <button
           type="submit"

@@ -1,14 +1,19 @@
 import { ServerValue } from "firebase-admin/database";
 import { getRtdb } from "./firebaseAdmin";
 
+const STALE_MS = 60 * 60 * 1000; // 1 hour, matches drive.js's index cache
+
 let cachedBase = null;
+let cachedAt = 0;
 
 async function loadBase() {
-  if (cachedBase) return cachedBase;
+  const isStale = !cachedBase || Date.now() - cachedAt > STALE_MS;
+  if (!isStale) return cachedBase;
   const snap = await getRtdb().ref("/").once("value");
   const data = snap.val();
   if (!data) throw new Error("Realtime Database root has no annotations data");
   cachedBase = data;
+  cachedAt = Date.now();
   return cachedBase;
 }
 
